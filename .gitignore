@@ -46,3 +46,8 @@ doc/protocol-binary.txt
 mingw/*.layout
 mingw/*.depend
 *.dirstamp
+mingw/build/curl*
+mingw/build/libressl*
+mingw/build/libevent*
+!mingw/build/libevent.sh
+!mingw/build/libevent.patch

@@ -7,19 +7,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - name: Install deps
-      run: |
-        sudo apt-get update -y
+    - name: Build Docker image
+      run: ./mingw/docker.sh build
     - name: Build & Test
       run: |
-        export DOCKER_IMAGE='debian:testing'
         export PARALLEL=5
         export CPU=64
-        time docker pull "${DOCKER_IMAGE}"
-        time docker run -v "$(pwd):$(pwd)" -w "$(pwd)" \
-          --env-file <(env | grep -E '^(PARALLEL|CPU)') \
-          "${DOCKER_IMAGE}" \
-          sh -c ./mingw/build/_ci-linux-debian.sh
+        export CODECOV_DISABLE=1
+        ./mingw/docker.sh start
         mkdir -p memcached-win64-mingw
         mv -v *.exe memcached-win64-mingw/
     - name: Archive memcached binaries

@@ -96,7 +96,7 @@ alias gpg='gpg --batch --keyserver-options timeout=15 --keyid-format LONG'
   find . -name '*.pc'  -type f -delete
 
   # TLS
-  OPENSSL_DIR="${BUILD_SCRIPT_DIR}/openssl-${OPENSSL_VER_}-win${_cpu}-mingw"
+  OPENSSL_DIR="${BUILD_SCRIPT_DIR}/${SSL_PREFIX_:-openssl}-${OPENSSL_VER_}-win${_cpu}-mingw"
 
   options=''
   options="${options} --host=${_TRIPLET}"
@@ -112,6 +112,8 @@ alias gpg='gpg --batch --keyserver-options timeout=15 --keyid-format LONG'
   export ac_cv_c_alignment=none
   export ac_cv_libevent_dir="${BUILD_SCRIPT_DIR}/libevent/pkg/usr/local"
   export ac_cv_libssl_dir="${OPENSSL_DIR}"
+  # Suppress GCC 15 false-positive on binary protocol buffer overlays
+  export CFLAGS="${CFLAGS:+$CFLAGS }-Wno-array-bounds"
 
   MEMCACHED_SRCDIR="$(realpath ../../../)"
   MEMCACHED_CURDIR="${PWD}"

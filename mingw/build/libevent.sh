@@ -36,11 +36,11 @@ _cpu="$2"
   find . -name '*.Plo' -type f -delete
   find . -name '*.pc'  -type f -delete
 
-  CFLAGS="-m${_cpu} -fno-ident -DNDEBUG -O2"
+  CFLAGS="-m${_cpu} -fno-ident -DNDEBUG -O2 -D_WIN32_WINNT=0x0600"
   [ "${_cpu}" = '32' ] && CFLAGS="${CFLAGS} -fno-asynchronous-unwind-tables"
 
   # TLS
-  OPENSSL_DIR="$(realpath "$(dirname $0)/..")/openssl-${OPENSSL_VER_}-win${_cpu}-mingw"
+  OPENSSL_DIR="$(realpath "$(dirname $0)/..")/${SSL_PREFIX_:-openssl}-${OPENSSL_VER_}-win${_cpu}-mingw"
   export CFLAGS="${CFLAGS} -I${OPENSSL_DIR}/include"
   export LDFLAGS="-L${OPENSSL_DIR}/lib"
   # Fix for configure error caused by undefined reference to `BCryptGenRandom'

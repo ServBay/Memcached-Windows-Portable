@@ -335,6 +335,7 @@ sub new_memcached {
         }
     } elsif ($args !~ /-s (\S+)/) {
         my $num = @unixsockets;
+        mkdir "tmp" unless -d "tmp";
         my $file = "tmp/memcachetest.$$.$num";
         $args .= " -s $file";
         push(@unixsockets, $file);

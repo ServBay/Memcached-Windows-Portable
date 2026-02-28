@@ -34,7 +34,7 @@ esac
 # TODO: add `--progress-bar off` when pip 10.0.0 is available
 if [ "${os}" != 'win' ]; then
   pip3 --version
-  pip3 --disable-pip-version-check install --user pefile
+  pip3 --disable-pip-version-check install --user --break-system-packages pefile
 fi
 
 alias curl='curl -fsSR --connect-timeout 15 -m 20 --retry 3'
@@ -84,20 +84,28 @@ dl_openssl_bin() {
   curl -o "${CURL_ARCHIVE_FILE}" -L --proto-redir =https "${CURL_DL_URL}" || exit 1
   # Extract
   unzip "${CURL_ARCHIVE_FILE}" >/dev/null 2>&1 || exit 1
-  # Derive OpenSSL version from opensslv.h' OPENSSL_VERSION_STR
-  OPENSSL_VER_=$(grep -Po '(?<=OPENSSL_VERSION_STR ")[^"]+' curl-*-win${OPENSSL_CPU}-mingw/include/openssl/opensslv.h)
-  # Copy openssl files from curl
-  OPENSSL_DIR="openssl-${OPENSSL_VER_}-win${OPENSSL_CPU}-mingw"
-  mkdir -p "${OPENSSL_DIR}/include" "${OPENSSL_DIR}/lib"
-  cp -a curl-*-win${OPENSSL_CPU}-mingw/dep/openssl*/* "${OPENSSL_DIR}/"
-  cp -a curl-*-win${OPENSSL_CPU}-mingw/include/openssl "${OPENSSL_DIR}/include/"
-  cp -a curl-*-win${OPENSSL_CPU}-mingw/lib/libcrypto.a "${OPENSSL_DIR}/lib/"
-  cp -a curl-*-win${OPENSSL_CPU}-mingw/lib/libssl.a "${OPENSSL_DIR}/lib/"
-  # Archive the OpenSSL
-  tar -c --owner=0 --group=0 --numeric-owner --mode=go=rX,u+rw,a-s "${OPENSSL_DIR}" | xz > "${OPENSSL_DIR}.tar.xz"
-  zip -q -9 -r "${OPENSSL_DIR}.zip" "${OPENSSL_DIR}"
-  touch -c -r "${CURL_ARCHIVE_FILE}" "${OPENSSL_DIR}.tar.xz"
-  touch -c -r "${CURL_ARCHIVE_FILE}" "${OPENSSL_DIR}.zip"
+  # Derive OpenSSL/LibreSSL version and prefix from opensslv.h
+  _ossl_hdr="curl-*-win${OPENSSL_CPU}-mingw/include/openssl/opensslv.h"
+  _libressl_ver=$(grep -Po '(?<=LibreSSL )[0-9.]+' ${_ossl_hdr} 2>/dev/null || true)
+  if [ -n "${_libressl_ver}" ]; then
+    export SSL_PREFIX_=libressl
+    OPENSSL_VER_="${_libressl_ver}"
+  else
+    export SSL_PREFIX_=openssl
+    OPENSSL_VER_=$(grep -Po '(?<=OPENSSL_VERSION_STR ")[^"]+' ${_ossl_hdr})
+  fi
+  # Copy ssl files from curl distribution
+  SSL_DIR="${SSL_PREFIX_}-${OPENSSL_VER_}-win${OPENSSL_CPU}-mingw"
+  mkdir -p "${SSL_DIR}/include" "${SSL_DIR}/lib"
+  cp -a curl-*-win${OPENSSL_CPU}-mingw/dep/${SSL_PREFIX_}*/* "${SSL_DIR}/" 2>/dev/null || true
+  cp -a curl-*-win${OPENSSL_CPU}-mingw/include/openssl "${SSL_DIR}/include/"
+  cp -a curl-*-win${OPENSSL_CPU}-mingw/lib/libcrypto.a "${SSL_DIR}/lib/"
+  cp -a curl-*-win${OPENSSL_CPU}-mingw/lib/libssl.a "${SSL_DIR}/lib/"
+  # Archive the SSL library
+  tar -c --owner=0 --group=0 --numeric-owner --mode=go=rX,u+rw,a-s "${SSL_DIR}" | xz > "${SSL_DIR}.tar.xz"
+  zip -q -9 -r "${SSL_DIR}.zip" "${SSL_DIR}"
+  touch -c -r "${CURL_ARCHIVE_FILE}" "${SSL_DIR}.tar.xz"
+  touch -c -r "${CURL_ARCHIVE_FILE}" "${SSL_DIR}.zip"
 }
 
 # OpenSSL
@@ -135,14 +143,18 @@ if [ -z "${CODECOV_DISABLE}" ]; then
   curl -o codecov.sh -L --proto-redir =https "https://codecov.io/bash" || exit 1
 fi
 
-# osslsigncode
+# osslsigncode (only needed for code signing; non-fatal if unavailable)
 # NOTE: "https://github.com/mtrojnar/osslsigncode/archive/${OSSLSIGNCODE_VER_}.tar.gz"
-curl -o pack.bin -L --proto-redir =https "https://deb.debian.org/debian/pool/main/o/osslsigncode/osslsigncode_${OSSLSIGNCODE_VER_}.orig.tar.gz" || exit 1
-openssl dgst -sha256 pack.bin | grep -q "${OSSLSIGNCODE_HASH}" || exit 1
-tar -xvf pack.bin >/dev/null 2>&1 || exit 1
-rm pack.bin
-rm -f -r osslsigncode && mv osslsigncode-${OSSLSIGNCODE_VER_} osslsigncode
-[ -f 'osslsigncode.patch' ] && dos2unix < 'osslsigncode.patch' | patch --batch -N -p1 -d osslsigncode
+if curl -o pack.bin -L --proto-redir =https "https://deb.debian.org/debian/pool/main/o/osslsigncode/osslsigncode_${OSSLSIGNCODE_VER_}.orig.tar.gz" 2>/dev/null; then
+  openssl dgst -sha256 pack.bin | grep -q "${OSSLSIGNCODE_HASH}" || exit 1
+  tar -xvf pack.bin >/dev/null 2>&1 || exit 1
+  rm pack.bin
+  rm -f -r osslsigncode && mv osslsigncode-${OSSLSIGNCODE_VER_} osslsigncode
+  [ -f 'osslsigncode.patch' ] && dos2unix < 'osslsigncode.patch' | patch --batch -N -p1 -d osslsigncode
+else
+  rm -f pack.bin
+  echo "WARNING: osslsigncode ${OSSLSIGNCODE_VER_} unavailable; code signing will be skipped"
+fi
 
 set +e
 

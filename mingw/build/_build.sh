@@ -82,7 +82,7 @@ if [ -f "${CODESIGN_KEY}" ]; then
   ./osslsigncode.sh
 fi
 
-ls -l "$(dirname "$0")/osslsigncode-determ"*
+ls -l "$(dirname "$0")/osslsigncode-determ"* 2>/dev/null || true
 
 case "${os}" in
   mac) alias sed=gsed;;
