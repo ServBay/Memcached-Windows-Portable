@@ -55,7 +55,9 @@ jobs:
           echo "Patched _dl.sh ->"; grep '^export MEMCACHED_VER_' mingw/build/_dl.sh
 
       - name: Build Docker image (Debian + MinGW-w64 toolchain)
-        run: ./mingw/docker.sh build
+        run: |
+          chmod +x mingw/docker.sh
+          ./mingw/docker.sh build
 
       - name: Build memcached (MinGW cross-compile)
         env:
