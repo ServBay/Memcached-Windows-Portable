@@ -11,7 +11,7 @@ RUN apt-get -qq -o=Dpkg::Use-Pty=0 update && \
       libssl-dev libio-socket-ssl-perl \
       gcc-mingw-w64 g++-mingw-w64 \
       zip zstd time jq dos2unix \
-      wine64 perl && \
+      wine perl && \
     rm -rf /var/lib/apt/lists/*
 
 # Install pefile (Python PE file parser used during build)
