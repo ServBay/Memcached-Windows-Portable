@@ -23,9 +23,9 @@ on:
         options: [x64, x86]
         default: x64
       skip_tests:
-        description: 'Skip `make test` / mc-crusher (set BUILD_ONLY=1)'
+        description: 'Skip `make test` / mc-crusher (BUILD_ONLY=1). Default true: the image has no wine (debian:testing wine pkg broken) so tests cannot run yet.'
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: write
