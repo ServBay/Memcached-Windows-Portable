@@ -1,0 +1,98 @@
+name: Build Memcached for Windows
+
+# Cross-compiles a native Windows memcached.exe with MinGW-w64 (inside a
+# Debian Docker image, exactly like mingw/docker.sh does locally), then
+# publishes a GitHub Release so ServBay-PKG-Builder-v1 can fetch it.
+#
+# Mirrors the established ServBay/*-Windows-Portable contract:
+#   - tag:   memcached-<version>-win-<arch>   (e.g. memcached-1.6.44-win-x64)
+#   - asset: memcached-<version>-win64-mingw.zip
+# The asset keeps the upstream "win64/win32" suffix because that is what the
+# MinGW build produces; the release tag uses the Builder's canonical arch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      memcached_version:
+        description: 'memcached version (e.g. 1.6.44)'
+        required: true
+        default: '1.6.44'
+      arch:
+        description: 'Architecture'
+        type: choice
+        options: [x64, x86]
+        default: x64
+      skip_tests:
+        description: 'Skip `make test` / mc-crusher (set BUILD_ONLY=1)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure version & arch
+        id: cfg
+        run: |
+          set -euo pipefail
+          VER='${{ inputs.memcached_version }}'
+          ARCH='${{ inputs.arch }}'
+          case "$ARCH" in
+            x64) CPU=64; WINARCH=win64 ;;
+            x86) CPU=32; WINARCH=win32 ;;
+            *)  echo "::error::unknown arch $ARCH"; exit 1 ;;
+          esac
+          echo "cpu=$CPU"      >> "$GITHUB_OUTPUT"
+          echo "winarch=$WINARCH" >> "$GITHUB_OUTPUT"
+          # Patch the hardcoded version in _dl.sh (default branch may lag behind).
+          sed -i "s/^export MEMCACHED_VER_=.*/export MEMCACHED_VER_='${VER}'/" mingw/build/_dl.sh
+          echo "Patched _dl.sh ->"; grep '^export MEMCACHED_VER_' mingw/build/_dl.sh
+
+      - name: Build Docker image (Debian + MinGW-w64 toolchain)
+        run: ./mingw/docker.sh build
+
+      - name: Build memcached (MinGW cross-compile)
+        env:
+          # BUILD_ONLY='' -> run `make test` + mc-crusher (matches upstream CI);
+          # BUILD_ONLY=1  -> produce the binary only (faster iteration).
+          BUILD_ONLY: ${{ inputs.skip_tests && '1' || '' }}
+        run: |
+          set -euo pipefail
+          REPO_ROOT="$PWD"
+          docker run --rm \
+            -v "${REPO_ROOT}:${REPO_ROOT}" -w "${REPO_ROOT}" \
+            -e PARALLEL=5 \
+            -e CPU='${{ steps.cfg.outputs.cpu }}' \
+            -e CODECOV_DISABLE=1 \
+            -e BUILD_ONLY="${BUILD_ONLY}" \
+            memcached-mingw-builder \
+            sh -c "cd mingw/build && ./_build.sh"
+
+      - name: Collect artifact
+        run: |
+          set -euo pipefail
+          VER='${{ inputs.memcached_version }}'
+          WINARCH='${{ steps.cfg.outputs.winarch }}'
+          ASSET="memcached-${VER}-${WINARCH}-mingw.zip"
+          test -f "mingw/build/${ASSET}"
+          mkdir -p release-assets
+          cp "mingw/build/${ASSET}" "release-assets/${ASSET}"
+          (cd release-assets && sha256sum "${ASSET}" > "${ASSET}.sha256")
+          ls -la release-assets/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: memcached-${{ inputs.memcached_version }}-win-${{ inputs.arch }}
+          name: Memcached ${{ inputs.memcached_version }} for Windows (${{ inputs.arch }})
+          files: |
+            release-assets/memcached-${{ inputs.memcached_version }}-${{ steps.cfg.outputs.winarch }}-mingw.zip
+            release-assets/*.sha256
+          draft: false
+          prerelease: false
