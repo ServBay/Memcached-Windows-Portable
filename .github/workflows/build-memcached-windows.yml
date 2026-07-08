@@ -69,13 +69,13 @@ jobs:
             make cmake \
             gcc-mingw-w64 g++-mingw-w64 \
             zip unzip zstd file time jq dos2unix wget \
-            wine netcat-traditional build-essential perl
+            wine netcat-traditional build-essential perl \
+            libio-socket-ssl-perl libssl-dev
           # wine 9 (ubuntu 24.04) ships a unified /usr/bin/wine with no wine64
           # binary, but memcached's Makefile test target calls `wine64`. Provide
           # it as a symlink; the unified binary auto-detects 64-bit PE images.
           sudo ln -sf /usr/bin/wine /usr/bin/wine64
           wine --version
-            netcat-openbsd libio-socket-ssl-perl libssl-dev
           # pefile is used by _peclean.py during the deterministic packaging step
           pip3 --disable-pip-version-check install --break-system-packages pefile
 
