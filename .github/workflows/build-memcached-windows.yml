@@ -82,7 +82,14 @@ jobs:
           VER='${{ inputs.memcached_version }}'
           WINARCH='${{ steps.cfg.outputs.winarch }}'
           ASSET="memcached-${VER}-${WINARCH}-mingw.zip"
-          test -f "mingw/build/${ASSET}"
+          if [ ! -f "mingw/build/${ASSET}" ]; then
+            echo "::error::expected asset mingw/build/${ASSET} not found"
+            echo "=== mingw/build/ contents (mingw zips) ===" || true
+            ls -l mingw/build/*-*-mingw*.* 2>/dev/null || true
+            echo "=== libevent config.log (tail) ===" || true
+            tail -60 mingw/build/libevent/config.log 2>/dev/null || echo "(no config.log)"
+            exit 1
+          fi
           mkdir -p release-assets
           cp "mingw/build/${ASSET}" "release-assets/${ASSET}"
           (cd release-assets && sha256sum "${ASSET}" > "${ASSET}.sha256")
