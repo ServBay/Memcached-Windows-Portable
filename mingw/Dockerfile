@@ -1,14 +1,17 @@
-FROM debian:testing
+FROM debian:bookworm
+
+# Pinned to debian:bookworm (stable) for reproducible toolchain + wine.
+# debian:testing was a moving target whose wine packaging broke ("wine64" /
+# "wine" had no installation candidate), and it would silently drift. wine64
+# is required to RUN the cross-compiled .exe for the `make test` / mc-crusher
+# self-test, so we need a release where it installs cleanly.
 
 # Add i386 architecture for 32-bit builds
 RUN dpkg --add-architecture i386
 
-# Install build dependencies. NOTE: wine is intentionally NOT installed here:
-# in current debian:testing neither `wine64` nor `wine` has an installation
-# candidate, and wine is only needed to RUN the built .exe for `make test` /
-# mc-crusher — it is not needed to cross-compile the binary. The release
-# workflow therefore builds with BUILD_ONLY=1. Re-add wine (from a working
-# source) in a follow-up to restore the runtime self-test.
+# Install build and test dependencies (matches _ci-linux-debian.sh).
+# NOTE: do NOT add the old `ln -sf /usr/lib/wine/wine64 /usr/bin/wine64` line —
+# that was wine-10 specific and would clobber bookworm's real /usr/bin/wine64.
 RUN apt-get -qq -o=Dpkg::Use-Pty=0 update && \
     apt-get -qq -o=Dpkg::Use-Pty=0 install -y \
       autoconf automake libtool \
@@ -16,7 +19,7 @@ RUN apt-get -qq -o=Dpkg::Use-Pty=0 update && \
       libssl-dev libio-socket-ssl-perl \
       gcc-mingw-w64 g++-mingw-w64 \
       zip zstd time jq dos2unix \
-      perl && \
+      wine64 perl && \
     rm -rf /var/lib/apt/lists/*
 
 # Install pefile (Python PE file parser used during build)
