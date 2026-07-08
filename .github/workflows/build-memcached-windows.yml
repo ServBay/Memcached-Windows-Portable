@@ -91,6 +91,14 @@ jobs:
           export BUILD_ONLY="${BUILD_ONLY}"
           export CRUSHER_TEST="${CRUSHER_TEST}"
           ./_build.sh
+          # Surface the wine self-test log (run_crusher_test writes here). The
+          # build is non-fatal on test failure, so print the log to diagnose.
+          _crushlog="memcached/pkg/usr/local/tests/mc-crusher.log"
+          if [ -f "${_crushlog}" ]; then
+            echo "===== mc-crusher wine self-test log ====="
+            tail -60 "${_crushlog}" || true
+            echo "===== end mc-crusher log ====="
+          fi
 
       - name: Collect artifact
         run: |
