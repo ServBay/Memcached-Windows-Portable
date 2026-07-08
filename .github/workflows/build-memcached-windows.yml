@@ -68,7 +68,7 @@ jobs:
             python3 python3-pip \
             make cmake \
             gcc-mingw-w64 g++-mingw-w64 \
-            zip zstd file time jq dos2unix \
+            zip unzip zstd file time jq dos2unix wget \
             wine64 perl \
             netcat-openbsd libio-socket-ssl-perl libssl-dev
           # pefile is used by _peclean.py during the deterministic packaging step
