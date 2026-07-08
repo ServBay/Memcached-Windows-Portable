@@ -69,7 +69,7 @@ jobs:
             make cmake \
             gcc-mingw-w64 g++-mingw-w64 \
             zip unzip zstd file time jq dos2unix wget \
-            wine64 perl \
+            wine64 perl netcat-traditional build-essential \
             netcat-openbsd libio-socket-ssl-perl libssl-dev
           # pefile is used by _peclean.py during the deterministic packaging step
           pip3 --disable-pip-version-check install --break-system-packages pefile
@@ -77,6 +77,11 @@ jobs:
       - name: Build memcached (MinGW cross-compile + wine self-test)
         env:
           BUILD_ONLY: ${{ inputs.skip_tests && '1' || '' }}
+          # CRUSHER_TEST gates run_crusher_test(): it launches the built
+          # memcached.exe under wine and load-tests it with mc-crusher — the
+          # real wine validation (memcached's own `make test` can't run a
+          # cross-compiled .exe natively). Enabled unless skip_tests.
+          CRUSHER_TEST: ${{ inputs.skip_tests && '' || '1' }}
         run: |
           set -euo pipefail
           cd mingw/build
@@ -84,6 +89,7 @@ jobs:
           export CPU='${{ steps.cfg.outputs.cpu }}'
           export CODECOV_DISABLE=1
           export BUILD_ONLY="${BUILD_ONLY}"
+          export CRUSHER_TEST="${CRUSHER_TEST}"
           ./_build.sh
 
       - name: Collect artifact
