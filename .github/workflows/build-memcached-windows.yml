@@ -1,14 +1,19 @@
 name: Build Memcached for Windows
 
-# Cross-compiles a native Windows memcached.exe with MinGW-w64 (inside a
-# Debian Docker image, exactly like mingw/docker.sh does locally), then
-# publishes a GitHub Release so ServBay-PKG-Builder-v1 can fetch it.
+# Cross-compiles a native Windows memcached.exe with MinGW-w64 and self-tests
+# it via wine, then publishes a GitHub Release so ServBay-PKG-Builder-v1 can
+# fetch it.
 #
-# Mirrors the established ServBay/*-Windows-Portable contract:
-#   - tag:   memcached-<version>-win-<arch>   (e.g. memcached-1.6.44-win-x64)
-#   - asset: memcached-<version>-win64-mingw.zip
-# The asset keeps the upstream "win64/win32" suffix because that is what the
-# MinGW build produces; the release tag uses the Builder's canonical arch.
+# Runs directly on ubuntu-latest (fixed managed 24.04 image) — NOT in Docker —
+# so we control the exact toolchain: ubuntu's mingw-w64 (gcc-13 / binutils 2.42)
+# is new enough to link curl's prebuilt libressl (which needs the CFG runtime
+# symbol __guard_dispatch_icall_fptr that debian:bookworm's older mingw lacks),
+# and ubuntu's `wine` package works (debian:testing's wine packaging is broken).
+# No Dockerfile / moving base-image dependency.
+#
+# Contract (same as the other ServBay/*-Windows-Portable repos):
+#   tag:   memcached-<version>-win-<arch>   (e.g. memcached-1.6.44-win-x64)
+#   asset: memcached-<version>-win64-mingw.zip
 
 on:
   workflow_dispatch:
@@ -23,7 +28,7 @@ on:
         options: [x64, x86]
         default: x64
       skip_tests:
-        description: 'Skip `make test` / mc-crusher (BUILD_ONLY=1). Default false: tests run via wine64 (image pinned to debian:bookworm).'
+        description: 'Skip `make test` / mc-crusher (BUILD_ONLY=1).'
         type: boolean
         default: false
 
@@ -50,31 +55,36 @@ jobs:
           esac
           echo "cpu=$CPU"      >> "$GITHUB_OUTPUT"
           echo "winarch=$WINARCH" >> "$GITHUB_OUTPUT"
-          # Patch the hardcoded version in _dl.sh (default branch may lag behind).
           sed -i "s/^export MEMCACHED_VER_=.*/export MEMCACHED_VER_='${VER}'/" mingw/build/_dl.sh
           echo "Patched _dl.sh ->"; grep '^export MEMCACHED_VER_' mingw/build/_dl.sh
 
-      - name: Build Docker image (Debian + MinGW-w64 toolchain)
+      - name: Install build & test toolchain (MinGW + wine)
         run: |
-          chmod +x mingw/docker.sh
-          ./mingw/docker.sh build
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            autoconf automake libtool \
+            curl git gpg ca-certificates \
+            python3 python3-pip \
+            make cmake \
+            gcc-mingw-w64 g++-mingw-w64 \
+            zip zstd file time jq dos2unix \
+            wine64 perl \
+            netcat-openbsd libio-socket-ssl-perl libssl-dev
+          # pefile is used by _peclean.py during the deterministic packaging step
+          pip3 --disable-pip-version-check install --break-system-packages pefile
 
-      - name: Build memcached (MinGW cross-compile)
+      - name: Build memcached (MinGW cross-compile + wine self-test)
         env:
-          # BUILD_ONLY='' -> run `make test` + mc-crusher (matches upstream CI);
-          # BUILD_ONLY=1  -> produce the binary only (faster iteration).
           BUILD_ONLY: ${{ inputs.skip_tests && '1' || '' }}
         run: |
           set -euo pipefail
-          REPO_ROOT="$PWD"
-          docker run --rm \
-            -v "${REPO_ROOT}:${REPO_ROOT}" -w "${REPO_ROOT}" \
-            -e PARALLEL=5 \
-            -e CPU='${{ steps.cfg.outputs.cpu }}' \
-            -e CODECOV_DISABLE=1 \
-            -e BUILD_ONLY="${BUILD_ONLY}" \
-            memcached-mingw-builder \
-            sh -c "cd mingw/build && ./_build.sh"
+          cd mingw/build
+          export PARALLEL=5
+          export CPU='${{ steps.cfg.outputs.cpu }}'
+          export CODECOV_DISABLE=1
+          export BUILD_ONLY="${BUILD_ONLY}"
+          ./_build.sh
 
       - name: Collect artifact
         run: |
@@ -82,16 +92,15 @@ jobs:
           VER='${{ inputs.memcached_version }}'
           WINARCH='${{ steps.cfg.outputs.winarch }}'
           ASSET="memcached-${VER}-${WINARCH}-mingw.zip"
-          if [ ! -f "mingw/build/${ASSET}" ]; then
-            echo "::error::expected asset mingw/build/${ASSET} not found"
-            echo "=== mingw/build/ contents (mingw zips) ===" || true
-            ls -l mingw/build/*-*-mingw*.* 2>/dev/null || true
-            echo "=== libevent config.log: SSL_new / link errors ===" || true
-            grep -iE "SSL_new|undefined reference|cannot find|ld returned|conftest.*error|No such file" mingw/build/libevent/config.log 2>/dev/null | tail -40 || echo "(no config.log)"
+          if [ ! -f "${ASSET}" ]; then
+            echo "::error::expected asset ${ASSET} not found in $(pwd)"
+            ls -l ./*-*-mingw*.* 2>/dev/null || true
+            echo "=== libevent config.log: SSL/link errors ==="
+            grep -iE "SSL_new|undefined reference|cannot find|ld returned|conftest.*error" libevent/config.log 2>/dev/null | tail -30 || true
             exit 1
           fi
           mkdir -p release-assets
-          cp "mingw/build/${ASSET}" "release-assets/${ASSET}"
+          cp "${ASSET}" "release-assets/${ASSET}"
           (cd release-assets && sha256sum "${ASSET}" > "${ASSET}.sha256")
           ls -la release-assets/
 
