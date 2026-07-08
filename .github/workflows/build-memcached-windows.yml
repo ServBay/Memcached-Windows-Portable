@@ -86,8 +86,8 @@ jobs:
             echo "::error::expected asset mingw/build/${ASSET} not found"
             echo "=== mingw/build/ contents (mingw zips) ===" || true
             ls -l mingw/build/*-*-mingw*.* 2>/dev/null || true
-            echo "=== libevent config.log (tail) ===" || true
-            tail -60 mingw/build/libevent/config.log 2>/dev/null || echo "(no config.log)"
+            echo "=== libevent config.log: SSL_new / link errors ===" || true
+            grep -iE "SSL_new|undefined reference|cannot find|ld returned|conftest.*error|No such file" mingw/build/libevent/config.log 2>/dev/null | tail -40 || echo "(no config.log)"
             exit 1
           fi
           mkdir -p release-assets
