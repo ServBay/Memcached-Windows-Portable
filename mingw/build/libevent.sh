@@ -43,7 +43,14 @@ _cpu="$2"
   OPENSSL_DIR="$(realpath "$(dirname $0)/..")/${SSL_PREFIX_:-openssl}-${OPENSSL_VER_}-win${_cpu}-mingw"
   export CFLAGS="${CFLAGS} -I${OPENSSL_DIR}/include"
   export LDFLAGS="-L${OPENSSL_DIR}/lib"
-  # Fix for configure error caused by undefined reference to `BCryptGenRandom'
+  # Make libressl's transitive deps available to configure's openssl link tests.
+  # libssl.a pulls symbols from libcrypto.a and references BCryptGenRandom (in
+  # libbcrypt); without these the AC_SEARCH_LIBS([SSL_new]) conftest fails on
+  # stricter linkers (e.g. debian:bookworm's mingw binutils) with "openssl is a
+  # must". $LIBS is appended to every configure link test, so the -lssl candidate
+  # resolves. Harmless on looser linkers (e.g. debian:testing) where it already works.
+  export LIBS="${LIBS:-} -lcrypto -lbcrypt"
+  # Kept for compatibility (some downstream consumers read this var).
   export OPENSSL_LIBADD="-lbcrypt"
 
   options=''
