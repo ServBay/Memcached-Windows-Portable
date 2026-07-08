@@ -92,6 +92,7 @@ jobs:
           VER='${{ inputs.memcached_version }}'
           WINARCH='${{ steps.cfg.outputs.winarch }}'
           ASSET="memcached-${VER}-${WINARCH}-mingw.zip"
+          cd mingw/build
           if [ ! -f "${ASSET}" ]; then
             echo "::error::expected asset ${ASSET} not found in $(pwd)"
             ls -l ./*-*-mingw*.* 2>/dev/null || true
@@ -99,10 +100,10 @@ jobs:
             grep -iE "SSL_new|undefined reference|cannot find|ld returned|conftest.*error" libevent/config.log 2>/dev/null | tail -30 || true
             exit 1
           fi
-          mkdir -p release-assets
-          cp "${ASSET}" "release-assets/${ASSET}"
-          (cd release-assets && sha256sum "${ASSET}" > "${ASSET}.sha256")
-          ls -la release-assets/
+          mkdir -p ../../release-assets
+          cp "${ASSET}" "../../release-assets/${ASSET}"
+          (cd ../../release-assets && sha256sum "${ASSET}" > "${ASSET}.sha256")
+          ls -la ../../release-assets/
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
